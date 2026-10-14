@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ShopVerse — a microservices store on Amazon EKS</title>
+  <meta name="description" content="Demo e-commerce app made of 10 microservices running on Kubernetes.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23e8553e'/%3E%3Cpath d='M18 24h28l-3 22H21z' fill='%23fff'/%3E%3Cpath d='M25 24a7 7 0 0 1 14 0' stroke='%23fff' stroke-width='4' fill='none'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#/" aria-label="ShopVerse home">
+      <span class="brand-mark" aria-hidden="true">◆</span>
+      <span>ShopVerse</span>
+    </a>
+    <nav class="nav" aria-label="Main">
+      <a href="#/" data-nav="shop">Shop</a>
+      <a href="#/orders" data-nav="orders">Orders</a>
+      <a href="#/notifications" data-nav="notifications">Inbox</a>
+      <a href="#/platform" data-nav="platform">Platform</a>
+    </nav>
+    <div class="actions">
+      <a class="cart-link" href="#/cart" data-nav="cart" aria-label="Cart">
+        <span aria-hidden="true">🛒</span><span class="badge" id="cart-count">0</span>
+      </a>
+      <span class="user" id="user-chip" hidden></span>
+      <a class="btn btn-small" href="#/login" id="login-link">Sign in</a>
+      <button class="btn btn-small btn-ghost" id="logout-btn" hidden>Sign out</button>
+    </div>
+  </header>
+
+  <main id="app" tabindex="-1"></main>
+
+  <footer class="footer">
+    <span>ShopVerse demo · 10 microservices on Amazon EKS</span>
+    <span id="build-info"></span>
+  </footer>
+
+  <dialog id="product-dialog" aria-labelledby="dialog-title"></dialog>
+  <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+  <script src="/app.js"></script>
+</body>
+</html>

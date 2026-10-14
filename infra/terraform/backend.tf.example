@@ -1,0 +1,13 @@
+# Remote state in S3 (for teams). Steps:
+#   1. Create a bucket once:  aws s3 mb s3://<unique-bucket-name> --region us-east-1
+#   2. Enable versioning:      aws s3api put-bucket-versioning --bucket <name> --versioning-configuration Status=Enabled
+#   3. Rename this file to backend.tf, fill in the bucket, then run: terraform init -migrate-state
+terraform {
+  backend "s3" {
+    bucket       = "REPLACE-with-your-unique-bucket-name"
+    key          = "shopverse-eks/terraform.tfstate"
+    region       = "us-east-1"
+    encrypt      = true
+    use_lockfile = true # native S3 state locking (Terraform >= 1.10), no DynamoDB table needed
+  }
+}

@@ -1,0 +1,12 @@
+# recommendation-service — Python/FastAPI, stateless with an in-memory cache.
+image:
+  repository: shopverse/recommendation-service
+  tag: "1.0.0"
+env:
+  PRODUCT_SERVICE_URL: http://product-service
+  CACHE_TTL_SECONDS: "60"
+resources:
+  requests: { cpu: 25m, memory: 96Mi }
+  limits: { memory: 192Mi }
+networkPolicy:
+  allowFrom: [api-gateway]

@@ -1,0 +1,22 @@
+# user-service — Python/FastAPI + PostgreSQL. Accounts and JWT login.
+image:
+  repository: shopverse/user-service
+  tag: "1.0.0"
+env:
+  DB_HOST: postgres.shopverse-data.svc.cluster.local
+  DB_PORT: "5432"
+  DB_NAME: users
+  DB_USER: user_service
+  DB_SSLMODE: disable
+  RABBITMQ_HOST: rabbitmq.shopverse-data.svc.cluster.local
+  RABBITMQ_USER: shopverse
+  BCRYPT_ROUNDS: "10"
+secretEnv:
+  DB_PASSWORD: { secretName: shopverse-secrets, key: user-service-db-password }
+  RABBITMQ_PASSWORD: { secretName: shopverse-secrets, key: rabbitmq-password }
+  JWT_SECRET: { secretName: shopverse-secrets, key: jwt-secret }
+resources:
+  requests: { cpu: 100m, memory: 128Mi }   # bcrypt hashing is CPU heavy
+  limits: { memory: 256Mi }
+networkPolicy:
+  allowFrom: [api-gateway]

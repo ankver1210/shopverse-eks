@@ -1,0 +1,17 @@
+# notification-service — Python, consumes RabbitMQ events, stores inbox in Redis.
+image:
+  repository: shopverse/notification-service
+  tag: "1.0.0"
+env:
+  REDIS_HOST: redis.shopverse-data.svc.cluster.local
+  REDIS_PORT: "6379"
+  RABBITMQ_HOST: rabbitmq.shopverse-data.svc.cluster.local
+  RABBITMQ_USER: shopverse
+secretEnv:
+  REDIS_PASSWORD: { secretName: shopverse-secrets, key: redis-password }
+  RABBITMQ_PASSWORD: { secretName: shopverse-secrets, key: rabbitmq-password }
+resources:
+  requests: { cpu: 25m, memory: 96Mi }
+  limits: { memory: 192Mi }
+networkPolicy:
+  allowFrom: [api-gateway]

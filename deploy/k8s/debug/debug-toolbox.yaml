@@ -1,0 +1,29 @@
+# A throw-away pod with curl and a shell, compliant with the "restricted" Pod Security level.
+# Used in the labs to test DNS, Services and NetworkPolicies from INSIDE the cluster.
+#   kubectl apply -f deploy/k8s/debug/debug-toolbox.yaml
+#   kubectl -n shopverse exec -it debug-toolbox -- sh
+#   kubectl delete -f deploy/k8s/debug/debug-toolbox.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: debug-toolbox
+  namespace: shopverse
+  labels: { app.kubernetes.io/name: debug-toolbox }
+spec:
+  automountServiceAccountToken: false
+  terminationGracePeriodSeconds: 1
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 100
+    seccompProfile: { type: RuntimeDefault }
+  containers:
+    - name: toolbox
+      image: curlimages/curl:8.22.0
+      command: ["sleep", "86400"]
+      resources:
+        requests: { cpu: 10m, memory: 16Mi }
+        limits: { memory: 64Mi }
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities: { drop: ["ALL"] }

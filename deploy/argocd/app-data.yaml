@@ -1,0 +1,19 @@
+# Data stores (PostgreSQL, Redis, RabbitMQ) managed by Argo CD from deploy/k8s/data.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: shopverse-data
+  namespace: argocd
+spec:
+  project: shopverse
+  source:
+    repoURL: REPO_URL
+    targetRevision: main
+    path: deploy/k8s/data
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: shopverse-data
+  syncPolicy:
+    automated:
+      prune: false     # never auto-delete databases!
+      selfHeal: true

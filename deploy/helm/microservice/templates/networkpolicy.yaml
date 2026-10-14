@@ -1,0 +1,47 @@
+{{- if .Values.networkPolicy.enabled }}
+# Zero-trust networking: only the listed callers may reach this service.
+# Enforced by the AWS VPC CNI network policy agent (enabled in Terraform).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "microservice.name" . }}
+  labels:
+    {{- include "microservice.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "microservice.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    {{- if .Values.networkPolicy.allowExternal }}
+    # Internet-facing service: the ALB forwards traffic straight to the pod IPs.
+    - ports:
+        - port: http
+    {{- else }}
+    {{- if .Values.networkPolicy.allowFrom }}
+    - from:
+        {{- range .Values.networkPolicy.allowFrom }}
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: {{ . }}
+        {{- end }}
+      ports:
+        - port: http
+    {{- end }}
+    {{- end }}
+    # `helm test` pods may call the service too.
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: helm-test
+      ports:
+        - port: http
+    # Prometheus scrapes /metrics from the monitoring namespace.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.monitoringNamespace }}
+      ports:
+        - port: http
+{{- end }}

@@ -1,0 +1,24 @@
+# order-service — Python/FastAPI + PostgreSQL. Checkout saga orchestrator.
+image:
+  repository: shopverse/order-service
+  tag: "1.0.0"
+env:
+  DB_HOST: postgres.shopverse-data.svc.cluster.local
+  DB_PORT: "5432"
+  DB_NAME: orders
+  DB_USER: order_service
+  DB_SSLMODE: disable
+  RABBITMQ_HOST: rabbitmq.shopverse-data.svc.cluster.local
+  RABBITMQ_USER: shopverse
+  CART_SERVICE_URL: http://cart-service
+  PRODUCT_SERVICE_URL: http://product-service
+  INVENTORY_SERVICE_URL: http://inventory-service
+  PAYMENT_SERVICE_URL: http://payment-service
+secretEnv:
+  DB_PASSWORD: { secretName: shopverse-secrets, key: order-service-db-password }
+  RABBITMQ_PASSWORD: { secretName: shopverse-secrets, key: rabbitmq-password }
+resources:
+  requests: { cpu: 50m, memory: 128Mi }
+  limits: { memory: 256Mi }
+networkPolicy:
+  allowFrom: [api-gateway]

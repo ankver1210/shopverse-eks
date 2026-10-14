@@ -1,0 +1,17 @@
+# inventory-service — Go + PostgreSQL. Stock levels and reservations.
+image:
+  repository: shopverse/inventory-service
+  tag: "1.0.0"
+env:
+  DB_HOST: postgres.shopverse-data.svc.cluster.local
+  DB_PORT: "5432"
+  DB_NAME: inventory
+  DB_USER: inventory_service
+  DB_SSLMODE: disable
+secretEnv:
+  DB_PASSWORD: { secretName: shopverse-secrets, key: inventory-service-db-password }
+resources:
+  requests: { cpu: 25m, memory: 32Mi }
+  limits: { memory: 128Mi }
+networkPolicy:
+  allowFrom: [api-gateway, order-service, inventory-restock]

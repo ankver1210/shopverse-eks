@@ -1,0 +1,11 @@
+apiVersion: v2
+name: microservice
+description: >-
+  Reusable "golden path" Helm chart used by every ShopVerse microservice.
+  One chart, ten values files: this is how platform teams standardise deployments.
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords: [shopverse, microservice, eks]
+maintainers:
+  - name: ShopVerse Platform Team

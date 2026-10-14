@@ -1,0 +1,17 @@
+# Copy this file to terraform.tfvars and adjust. Every value is optional.
+
+region       = "us-east-1"
+cluster_name = "shopverse-eks"
+
+# SPOT is ~60-70% cheaper. Use ON_DEMAND if Spot capacity is unavailable in your region.
+node_capacity_type = "SPOT"
+node_desired_size  = 3
+
+# Recommended: only allow YOUR IP to reach the Kubernetes API (find it at https://checkip.amazonaws.com)
+# cluster_endpoint_public_access_cidrs = ["203.0.113.25/32"]
+
+# Your GitHub repository (owner/name) to enable CI/CD (see docs/03-CICD-GITOPS.md)
+# github_repository = "your-github-user/shopverse-eks"
+
+# Set to false if the account already has the GitHub OIDC provider
+# create_github_oidc_provider = true

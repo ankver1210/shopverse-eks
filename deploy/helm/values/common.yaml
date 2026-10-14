@@ -1,0 +1,6 @@
+# Settings shared by ALL services. Loaded first, then <service>.yaml on top.
+global:
+  # Filled in by scripts/02-configure-repo.sh (your AWS account + region).
+  imageRegistry: "ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com"
+  environment: dev
+  partOf: shopverse

@@ -1,0 +1,138 @@
+# =============================================================================
+# Default values for the ShopVerse "microservice" chart.
+# Every service overrides only what is different in deploy/helm/values/<service>.yaml
+# =============================================================================
+
+# -- Name of the service. Defaults to the Helm release name (e.g. "cart-service").
+nameOverride: ""
+
+global:
+  # -- ECR registry, e.g. 123456789012.dkr.ecr.us-east-1.amazonaws.com
+  #    Filled in automatically by scripts/02-configure-repo.sh
+  imageRegistry: ""
+  environment: dev
+  partOf: shopverse
+
+image:
+  # -- Repository path inside the registry
+  repository: shopverse/example
+  # -- Image tag. CI/CD (or scripts/04-build-and-push.sh) updates this.
+  tag: "1.0.0"
+  pullPolicy: IfNotPresent
+
+# -- Ignored when autoscaling.enabled=true (the HPA owns the replica count).
+replicaCount: 2
+
+containerPort: 8080
+
+service:
+  type: ClusterIP
+  port: 80
+
+# -- Plain (non-secret) environment variables. Rendered into a ConfigMap.
+env: {}
+
+# -- Environment variables read from Kubernetes Secrets:
+#    ENV_NAME: { secretName: shopverse-secrets, key: some-key }
+secretEnv: {}
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 96Mi
+  limits:
+    memory: 256Mi   # no CPU limit on purpose: avoids CPU throttling, requests guarantee fairness
+
+probes:
+  # Startup probe: gives slow starters (waiting for the DB) up to 2 minutes before liveness kicks in.
+  startup:
+    path: /healthz
+    periodSeconds: 3
+    failureThreshold: 40
+  # Liveness: "is the process alive?" Failing it restarts the container.
+  liveness:
+    path: /healthz
+    periodSeconds: 10
+    timeoutSeconds: 2
+    failureThreshold: 3
+  # Readiness: "can it take traffic right now?" Failing it removes the pod from the Service.
+  readiness:
+    path: /readyz
+    periodSeconds: 5
+    timeoutSeconds: 2
+    failureThreshold: 3
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+serviceMonitor:
+  # -- Requires the Prometheus Operator CRDs (installed with kube-prometheus-stack).
+  enabled: true
+  interval: 15s
+  path: /metrics
+
+networkPolicy:
+  enabled: true
+  # -- Names (app.kubernetes.io/name) of pods in this namespace allowed to call this service.
+  allowFrom: []
+  # -- Allow traffic from anywhere (only for internet-facing services behind the ALB).
+  allowExternal: false
+  # -- Namespace allowed to scrape /metrics.
+  monitoringNamespace: monitoring
+
+ingress:
+  enabled: false
+  path: /
+  pathType: Prefix
+  # -- All ingresses with the same group share ONE AWS Application Load Balancer.
+  groupName: shopverse
+  # -- Lower numbers are evaluated first by the ALB (more specific paths need lower numbers).
+  groupOrder: 100
+  scheme: internet-facing
+  healthCheckPath: /healthz
+  # -- Optional ACM certificate ARN to enable HTTPS (see docs/02-DEPLOYMENT-GUIDE.md).
+  certificateArn: ""
+  # -- Optional host name, e.g. shop.example.com
+  host: ""
+
+serviceAccount:
+  create: true
+  # -- Services that call AWS APIs would use EKS Pod Identity bound to this account.
+  annotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+# -- Seconds Kubernetes waits after SIGTERM before force-killing the pod.
+terminationGracePeriodSeconds: 30
+# -- Sleep before SIGTERM so the ALB / kube-proxy stop sending traffic first.
+preStopSleepSeconds: 5
+
+# -- Spread replicas across Availability Zones and nodes.
+topologySpread:
+  enabled: true
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# -- Creates a `helm test` pod that calls /healthz.
+tests:
+  enabled: true

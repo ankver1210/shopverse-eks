@@ -1,0 +1,15 @@
+# Apply with:  kubectl apply -k deploy/k8s/monitoring
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: monitoring
+resources:
+  - prometheus-rules.yaml
+configMapGenerator:
+  - name: shopverse-grafana-dashboard
+    files:
+      - shopverse-dashboard.json
+    options:
+      labels:
+        grafana_dashboard: "1"   # the Grafana sidecar loads every ConfigMap with this label
+generatorOptions:
+  disableNameSuffixHash: true

@@ -1,0 +1,99 @@
+# Recording rules (pre-computed queries) and alerts for ShopVerse.
+# kube-prometheus-stack picks this up automatically (ruleSelectorNilUsesHelmValues=false).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: shopverse
+  labels: { app.kubernetes.io/part-of: shopverse }
+spec:
+  groups:
+    - name: shopverse.recording
+      interval: 30s
+      rules:
+        - record: shopverse:http_requests:rate5m
+          expr: sum by (service) (rate(http_requests_total{namespace="shopverse"}[5m]))
+        - record: shopverse:http_errors:ratio5m
+          expr: |
+            sum by (service) (rate(http_requests_total{namespace="shopverse", status_code=~"5.."}[5m]))
+            /
+            sum by (service) (rate(http_requests_total{namespace="shopverse"}[5m]))
+        - record: shopverse:http_latency_p95:5m
+          expr: histogram_quantile(0.95, sum by (service, le) (rate(http_request_duration_seconds_bucket{namespace="shopverse"}[5m])))
+
+    - name: shopverse.alerts
+      rules:
+        - alert: ShopverseHighErrorRate
+          expr: shopverse:http_errors:ratio5m > 0.05 and shopverse:http_requests:rate5m > 0.1
+          for: 2m
+          labels: { severity: warning, team: shopverse }
+          annotations:
+            summary: "{{ $labels.service }} is failing {{ $value | humanizePercentage }} of requests"
+            description: "More than 5% of requests to {{ $labels.service }} returned HTTP 5xx for 2 minutes. Check: kubectl -n shopverse logs deploy/{{ $labels.service }}"
+            runbook: "docs/06-TROUBLESHOOTING.md (section: High error rate)"
+
+        - alert: ShopverseHighLatency
+          expr: shopverse:http_latency_p95:5m > 1
+          for: 5m
+          labels: { severity: warning, team: shopverse }
+          annotations:
+            summary: "{{ $labels.service }} p95 latency is {{ $value | humanizeDuration }}"
+            description: "95% of requests should finish in under 1 second."
+
+        - alert: ShopverseServiceDown
+          expr: up{namespace="shopverse"} == 0
+          for: 1m
+          labels: { severity: critical, team: shopverse }
+          annotations:
+            summary: "Prometheus cannot scrape {{ $labels.service }} pod {{ $labels.pod }}"
+            description: "The pod is not answering on /metrics. It may be crashing or stuck."
+
+        - alert: ShopverseNoReadyReplicas
+          expr: kube_deployment_status_replicas_available{namespace="shopverse"} == 0
+          for: 1m
+          labels: { severity: critical, team: shopverse }
+          annotations:
+            summary: "Deployment {{ $labels.deployment }} has no available replicas"
+            description: "Users are affected. Check: kubectl -n shopverse describe deploy/{{ $labels.deployment }}"
+
+        - alert: ShopverseHPAMaxedOut
+          expr: |
+            kube_horizontalpodautoscaler_status_current_replicas{namespace="shopverse"}
+              >= kube_horizontalpodautoscaler_spec_max_replicas{namespace="shopverse"}
+          for: 10m
+          labels: { severity: warning, team: shopverse }
+          annotations:
+            summary: "HPA {{ $labels.horizontalpodautoscaler }} is at its maximum replicas"
+            description: "The service cannot scale further. Raise maxReplicas or investigate the load."
+
+        - alert: ShopverseCircuitBreakerOpen
+          expr: max by (upstream) (gateway_circuit_breaker_state) == 2
+          for: 1m
+          labels: { severity: warning, team: shopverse }
+          annotations:
+            summary: "api-gateway circuit breaker OPEN for {{ $labels.upstream }}-service"
+            description: "The gateway is failing fast because {{ $labels.upstream }}-service keeps erroring."
+
+        - alert: ShopverseOutboxBacklog
+          expr: max by (service) (outbox_pending_events) > 50
+          for: 5m
+          labels: { severity: warning, team: shopverse }
+          annotations:
+            summary: "{{ $labels.service }} has {{ $value }} unpublished events"
+            description: "Events are piling up in the outbox. Is RabbitMQ healthy? kubectl -n shopverse-data get pods"
+
+        - alert: ShopverseDeadLetteredEvents
+          expr: increase(notifications_failed_total[10m]) > 0
+          labels: { severity: info, team: shopverse }
+          annotations:
+            summary: "notification-service moved events to the dead-letter queue"
+            description: "Inspect them in the RabbitMQ UI (queue notification-service.dlq)."
+
+        - alert: ShopversePaymentDeclineSpike
+          expr: |
+            sum(rate(payments_total{status="DECLINED"}[5m])) / sum(rate(payments_total[5m])) > 0.5
+            and sum(rate(payments_total[5m])) > 0.05
+          for: 5m
+          labels: { severity: warning, team: shopverse }
+          annotations:
+            summary: "More than half of payments are being declined"
+            description: "Could be fraud, a bad deploy, or someone testing the decline card a lot."

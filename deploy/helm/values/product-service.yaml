@@ -1,0 +1,17 @@
+# product-service — Go + PostgreSQL. Product catalog.
+image:
+  repository: shopverse/product-service
+  tag: "1.0.0"
+env:
+  DB_HOST: postgres.shopverse-data.svc.cluster.local
+  DB_PORT: "5432"
+  DB_NAME: products
+  DB_USER: product_service
+  DB_SSLMODE: disable
+secretEnv:
+  DB_PASSWORD: { secretName: shopverse-secrets, key: product-service-db-password }
+resources:
+  requests: { cpu: 25m, memory: 32Mi }
+  limits: { memory: 128Mi }
+networkPolicy:
+  allowFrom: [api-gateway, cart-service, order-service, recommendation-service]

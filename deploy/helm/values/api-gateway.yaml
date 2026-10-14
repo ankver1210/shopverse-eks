@@ -1,0 +1,28 @@
+# api-gateway — Node.js. Single entry point for /api/* (auth, routing, rate limiting).
+image:
+  repository: shopverse/api-gateway
+  tag: "1.0.0"
+env:
+  USER_SERVICE_URL: http://user-service
+  PRODUCT_SERVICE_URL: http://product-service
+  CART_SERVICE_URL: http://cart-service
+  ORDER_SERVICE_URL: http://order-service
+  INVENTORY_SERVICE_URL: http://inventory-service
+  PAYMENT_SERVICE_URL: http://payment-service
+  RECOMMENDATION_SERVICE_URL: http://recommendation-service
+  NOTIFICATION_SERVICE_URL: http://notification-service
+  RATE_LIMIT_PER_MINUTE: "3000"   # per client IP, per gateway pod
+  UPSTREAM_TIMEOUT_MS: "10000"
+secretEnv:
+  JWT_SECRET: { secretName: shopverse-secrets, key: jwt-secret }
+resources:
+  requests: { cpu: 50m, memory: 96Mi }
+  limits: { memory: 256Mi }
+autoscaling:
+  maxReplicas: 8
+networkPolicy:
+  allowExternal: true
+ingress:
+  enabled: true
+  path: /api
+  groupOrder: 10    # more specific than "/", so evaluated first

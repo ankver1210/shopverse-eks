@@ -1,0 +1,59 @@
+# Static checks for infrastructure and deployment code (runs on every PR and push to main).
+name: Lint
+
+on:
+  pull_request:
+    paths: ["infra/**", "deploy/**", "scripts/**", ".github/workflows/lint.yaml"]
+  push:
+    branches: [main]
+    paths: ["infra/**", "deploy/**", "scripts/**", ".github/workflows/lint.yaml"]
+
+permissions:
+  contents: read
+
+jobs:
+  terraform:
+    name: Terraform fmt + validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+      - run: terraform -chdir=infra/terraform fmt -check -recursive
+      - run: terraform -chdir=infra/terraform init -backend=false -input=false
+      - run: terraform -chdir=infra/terraform validate
+
+  kubernetes:
+    name: Helm lint + manifest validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+      - name: Install kubeconform
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.8.0/kubeconform-linux-amd64.tar.gz | tar xz
+          sudo mv kubeconform /usr/local/bin/
+      - name: Render and validate every service
+        run: |
+          set -euo pipefail
+          mkdir -p rendered
+          for values in deploy/helm/values/*.yaml; do
+            svc="$(basename "$values" .yaml)"
+            [ "$svc" = "common" ] && continue
+            helm lint deploy/helm/microservice -f deploy/helm/values/common.yaml -f "$values"
+            helm template "$svc" deploy/helm/microservice -n shopverse \
+              -f deploy/helm/values/common.yaml -f "$values" \
+              --api-versions monitoring.coreos.com/v1 > "rendered/${svc}.yaml"
+          done
+          for dir in platform data app-extras monitoring; do kubectl kustomize "deploy/k8s/${dir}" > "rendered/k8s-${dir}.yaml"; done
+          kubeconform -strict -summary -kubernetes-version 1.36.0 \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            -skip ClusterSecretStore \
+            rendered/ deploy/k8s/namespaces.yaml deploy/argocd/
+
+  shell:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: shellcheck -x scripts/*.sh scripts/lib/*.sh deploy/k8s/data/init-databases.sh

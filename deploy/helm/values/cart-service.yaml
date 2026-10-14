@@ -1,0 +1,15 @@
+# cart-service — Node.js + Redis. Shopping carts.
+image:
+  repository: shopverse/cart-service
+  tag: "1.0.0"
+env:
+  REDIS_HOST: redis.shopverse-data.svc.cluster.local
+  REDIS_PORT: "6379"
+  PRODUCT_SERVICE_URL: http://product-service
+secretEnv:
+  REDIS_PASSWORD: { secretName: shopverse-secrets, key: redis-password }
+resources:
+  requests: { cpu: 25m, memory: 64Mi }
+  limits: { memory: 192Mi }
+networkPolicy:
+  allowFrom: [api-gateway, order-service]

@@ -1,0 +1,21 @@
+{
+  "name": "cart-service",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ShopVerse cart service backed by Redis",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "express": "5.3.0",
+    "ioredis": "6.0.0",
+    "pino": "10.4.0",
+    "prom-client": "15.1.3"
+  }
+}

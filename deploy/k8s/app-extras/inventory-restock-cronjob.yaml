@@ -1,0 +1,38 @@
+# A Kubernetes CronJob: every 6 hours, top inventory back up to its starting levels.
+# Trigger it manually:  kubectl -n shopverse create job --from=cronjob/inventory-restock restock-now
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: inventory-restock
+  labels: { app.kubernetes.io/name: inventory-restock }
+spec:
+  schedule: "0 */6 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 120
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          labels: { app.kubernetes.io/name: inventory-restock, app.kubernetes.io/part-of: shopverse }
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 100
+            seccompProfile: { type: RuntimeDefault }
+          containers:
+            - name: restock
+              image: curlimages/curl:8.22.0
+              args: ["--fail-with-body", "--silent", "--show-error", "--max-time", "30", "-X", "POST", "http://inventory-service/inventory/restock"]
+              resources:
+                requests: { cpu: 10m, memory: 16Mi }
+                limits: { memory: 32Mi }
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: ["ALL"] }

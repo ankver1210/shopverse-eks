@@ -1,0 +1,185 @@
+# Run the WHOLE platform on your laptop — no AWS needed, no cost.
+#   docker compose up --build        (first build takes ~5 minutes)
+#   open http://localhost:8080
+#   docker compose down -v           (stop and delete local data)
+#
+# Great for checking that everything works before deploying to EKS.
+# The passwords below are for local development only.
+
+x-common-env: &common-env
+  LOG_LEVEL: info
+  APP_VERSION: local
+  JWT_SECRET: local-dev-jwt-secret-change-me-0123456789abcdef
+
+x-db-env: &db-env
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  DB_SSLMODE: disable
+
+x-rabbit-env: &rabbit-env
+  RABBITMQ_HOST: rabbitmq
+  RABBITMQ_USER: shopverse
+  RABBITMQ_PASSWORD: local-rabbit-pw
+
+x-redis-env: &redis-env
+  REDIS_HOST: redis
+  REDIS_PASSWORD: local-redis-pw
+
+x-depends-data: &depends-data
+  postgres: { condition: service_healthy }
+  redis: { condition: service_healthy }
+  rabbitmq: { condition: service_healthy }
+
+services:
+  # ------------------------------------------------------------- data stores
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: local-postgres-pw
+      PGDATA: /var/lib/postgresql/data/pgdata
+      USER_SERVICE_DB_PASSWORD: local-user-pw
+      PRODUCT_SERVICE_DB_PASSWORD: local-product-pw
+      ORDER_SERVICE_DB_PASSWORD: local-order-pw
+      INVENTORY_SERVICE_DB_PASSWORD: local-inventory-pw
+      PAYMENT_SERVICE_DB_PASSWORD: local-payment-pw
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./deploy/k8s/data/init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-h", "127.0.0.1"]
+      interval: 5s
+      retries: 20
+
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--requirepass", "local-redis-pw", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a local-redis-pw --no-auth-warning ping | grep -q PONG"]
+      interval: 5s
+      retries: 20
+
+  rabbitmq:
+    image: rabbitmq:4.2-management-alpine
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: shopverse
+      RABBITMQ_DEFAULT_PASS: local-rabbit-pw
+    ports:
+      - "15672:15672"   # management UI: http://localhost:15672 (shopverse / local-rabbit-pw)
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 10s
+      retries: 30
+
+  # ------------------------------------------------------------- microservices
+  frontend:
+    build: ./services/frontend
+    environment:
+      <<: *common-env
+      SERVICE_NAME: frontend
+      API_GATEWAY_URL: http://api-gateway:8080
+    ports:
+      - "8080:8080"
+    depends_on: [api-gateway]
+
+  api-gateway:
+    build: ./services/api-gateway
+    environment:
+      <<: *common-env
+      SERVICE_NAME: api-gateway
+      USER_SERVICE_URL: http://user-service:8080
+      PRODUCT_SERVICE_URL: http://product-service:8080
+      CART_SERVICE_URL: http://cart-service:8080
+      ORDER_SERVICE_URL: http://order-service:8080
+      INVENTORY_SERVICE_URL: http://inventory-service:8080
+      PAYMENT_SERVICE_URL: http://payment-service:8080
+      RECOMMENDATION_SERVICE_URL: http://recommendation-service:8080
+      NOTIFICATION_SERVICE_URL: http://notification-service:8080
+    ports:
+      - "8081:8080"
+
+  user-service:
+    build: ./services/user-service
+    environment:
+      <<: [*common-env, *db-env, *rabbit-env]
+      SERVICE_NAME: user-service
+      DB_NAME: users
+      DB_USER: user_service
+      DB_PASSWORD: local-user-pw
+    depends_on: *depends-data
+
+  product-service:
+    build: ./services/product-service
+    environment:
+      <<: [*common-env, *db-env]
+      SERVICE_NAME: product-service
+      DB_NAME: products
+      DB_USER: product_service
+      DB_PASSWORD: local-product-pw
+    depends_on: *depends-data
+
+  cart-service:
+    build: ./services/cart-service
+    environment:
+      <<: [*common-env, *redis-env]
+      SERVICE_NAME: cart-service
+      PRODUCT_SERVICE_URL: http://product-service:8080
+    depends_on: *depends-data
+
+  order-service:
+    build: ./services/order-service
+    environment:
+      <<: [*common-env, *db-env, *rabbit-env]
+      SERVICE_NAME: order-service
+      DB_NAME: orders
+      DB_USER: order_service
+      DB_PASSWORD: local-order-pw
+      CART_SERVICE_URL: http://cart-service:8080
+      PRODUCT_SERVICE_URL: http://product-service:8080
+      INVENTORY_SERVICE_URL: http://inventory-service:8080
+      PAYMENT_SERVICE_URL: http://payment-service:8080
+    depends_on: *depends-data
+
+  inventory-service:
+    build: ./services/inventory-service
+    environment:
+      <<: [*common-env, *db-env]
+      SERVICE_NAME: inventory-service
+      DB_NAME: inventory
+      DB_USER: inventory_service
+      DB_PASSWORD: local-inventory-pw
+    depends_on: *depends-data
+
+  payment-service:
+    build: ./services/payment-service
+    environment:
+      <<: [*common-env, *db-env]
+      SERVICE_NAME: payment-service
+      DB_NAME: payments
+      DB_USER: payment_service
+      DB_PASSWORD: local-payment-pw
+    depends_on: *depends-data
+
+  recommendation-service:
+    build: ./services/recommendation-service
+    environment:
+      <<: *common-env
+      SERVICE_NAME: recommendation-service
+      PRODUCT_SERVICE_URL: http://product-service:8080
+
+  notification-service:
+    build: ./services/notification-service
+    environment:
+      <<: [*common-env, *redis-env, *rabbit-env]
+      SERVICE_NAME: notification-service
+    depends_on: *depends-data
+
+volumes:
+  postgres-data:
+  redis-data:
+  rabbitmq-data:

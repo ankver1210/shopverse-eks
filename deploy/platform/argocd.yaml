@@ -1,0 +1,30 @@
+# Argo CD — GitOps controller. We reach the UI with kubectl port-forward (no public endpoint).
+configs:
+  params:
+    server.insecure: true        # TLS is unnecessary through a local port-forward
+  cm:
+    timeout.reconciliation: 60s  # check Git for changes every minute
+dex:
+  enabled: false                 # no SSO for a learning cluster; use the admin account
+notifications:
+  enabled: false
+controller:
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { memory: 1Gi }
+server:
+  resources:
+    requests: { cpu: 25m, memory: 64Mi }
+    limits: { memory: 256Mi }
+repoServer:
+  resources:
+    requests: { cpu: 25m, memory: 128Mi }
+    limits: { memory: 512Mi }
+applicationSet:
+  resources:
+    requests: { cpu: 10m, memory: 64Mi }
+    limits: { memory: 256Mi }
+redis:
+  resources:
+    requests: { cpu: 10m, memory: 32Mi }
+    limits: { memory: 128Mi }

@@ -1,0 +1,84 @@
+# RabbitMQ 4 — the event bus (topic exchange "shopverse.events").
+# Production alternative: Amazon MQ for RabbitMQ (or SNS/SQS, or MSK for Kafka).
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq
+  labels: { app.kubernetes.io/name: rabbitmq, app.kubernetes.io/part-of: shopverse }
+spec:
+  selector: { app.kubernetes.io/name: rabbitmq }
+  ports:
+    - { name: amqp, port: 5672, targetPort: amqp }
+    - { name: management, port: 15672, targetPort: management }
+    - { name: prometheus, port: 15692, targetPort: prometheus }
+---
+# Headless service gives the pod a stable DNS name; RabbitMQ stores data per node name.
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq-headless
+  labels: { app.kubernetes.io/name: rabbitmq, app.kubernetes.io/part-of: shopverse }
+spec:
+  clusterIP: None
+  selector: { app.kubernetes.io/name: rabbitmq }
+  ports:
+    - { name: amqp, port: 5672, targetPort: amqp }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rabbitmq
+  labels: { app.kubernetes.io/name: rabbitmq, app.kubernetes.io/part-of: shopverse }
+spec:
+  serviceName: rabbitmq-headless
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: rabbitmq }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: rabbitmq, app.kubernetes.io/part-of: shopverse }
+    spec:
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100       # "rabbitmq" user in the alpine image
+        runAsGroup: 101
+        fsGroup: 101
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: rabbitmq
+          image: rabbitmq:4.2-management-alpine
+          ports:
+            - { name: amqp, containerPort: 5672 }
+            - { name: management, containerPort: 15672 }
+            - { name: prometheus, containerPort: 15692 }
+          env:
+            - { name: RABBITMQ_DEFAULT_USER, value: shopverse }
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom: { secretKeyRef: { name: shopverse-secrets, key: rabbitmq-password } }
+          readinessProbe:
+            exec: { command: ["rabbitmq-diagnostics", "-q", "check_port_connectivity"] }
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            timeoutSeconds: 10
+          livenessProbe:
+            exec: { command: ["rabbitmq-diagnostics", "-q", "ping"] }
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 15
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 768Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/rabbitmq }
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: gp3
+        resources:
+          requests: { storage: 2Gi }

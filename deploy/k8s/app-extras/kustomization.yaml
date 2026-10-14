@@ -1,0 +1,7 @@
+# Apply with:  kubectl apply -k deploy/k8s/app-extras
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: shopverse
+resources:
+  - default-deny.yaml
+  - inventory-restock-cronjob.yaml

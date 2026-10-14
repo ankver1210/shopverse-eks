@@ -1,0 +1,35 @@
+# Namespace-wide extras: default-deny NetworkPolicy and the inventory restock CronJob.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: shopverse-extras
+  namespace: argocd
+spec:
+  project: shopverse
+  source:
+    repoURL: REPO_URL
+    targetRevision: main
+    path: deploy/k8s/app-extras
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: shopverse
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+---
+# Alerts and the Grafana dashboard.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: shopverse-monitoring
+  namespace: argocd
+spec:
+  project: shopverse
+  source:
+    repoURL: REPO_URL
+    targetRevision: main
+    path: deploy/k8s/monitoring
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }

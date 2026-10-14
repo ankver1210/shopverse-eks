@@ -1,0 +1,180 @@
+# =============================================================================
+# CI/CD pipeline for the 10 microservices
+#
+#   Pull request -> unit tests + image build + vulnerability scan   (nothing is pushed)
+#   Push to main -> the same, then push images to ECR and commit the new image tags
+#                   to deploy/helm/values/. Argo CD sees that commit and deploys it (GitOps).
+#
+# Only services whose folder changed are built (monorepo pattern).
+# AWS access uses OpenID Connect: no AWS keys are stored in GitHub.
+#
+# One-time setup (repo Settings > Secrets and variables > Actions > Variables):
+#   AWS_REGION    e.g. us-east-1
+#   AWS_ROLE_ARN  output "github_actions_role_arn" from Terraform
+#   TRIVY_EXIT_CODE (optional) "0" to report vulnerabilities without failing the build
+#
+# Actions are pinned to commit SHAs (supply-chain security best practice).
+# =============================================================================
+name: CI/CD
+
+on:
+  pull_request:
+    paths: ["services/**"]
+  push:
+    branches: [main]
+    paths: ["services/**", ".github/workflows/ci-cd.yaml"]
+  workflow_dispatch:
+    inputs:
+      services:
+        description: "Services to build, space separated (leave empty for all)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  ALL_SERVICES: >-
+    frontend api-gateway user-service product-service cart-service order-service
+    inventory-service payment-service recommendation-service notification-service
+
+jobs:
+  changes:
+    name: Detect changed services
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.detect.outputs.services }}
+      any: ${{ steps.detect.outputs.any }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - id: detect
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          BASE_REF: ${{ github.base_ref }}
+          REQUESTED: ${{ github.event.inputs.services }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            list="${REQUESTED:-$ALL_SERVICES}"
+          elif [ "$EVENT" = "push" ] && { [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; }; then
+            list="$ALL_SERVICES"   # first push of a new branch/repo
+          else
+            if [ "$EVENT" = "pull_request" ]; then range="origin/${BASE_REF}...HEAD"; else range="${BEFORE}..HEAD"; fi
+            list="$(git diff --name-only "$range" -- services/ | cut -d/ -f2 | sort -u | tr '\n' ' ')"
+            if git diff --name-only "$range" | grep -q '^.github/workflows/ci-cd.yaml$'; then list="$ALL_SERVICES"; fi
+          fi
+          # shellcheck disable=SC2086  # word splitting of $list is intended
+          json="$(printf '%s\n' $list | jq -R . | jq -cs 'map(select(length > 0))')"
+          echo "Services to build: $json"
+          echo "services=$json" >> "$GITHUB_OUTPUT"
+          if [ "$json" = "[]" ]; then echo "any=false" >> "$GITHUB_OUTPUT"; else echo "any=true" >> "$GITHUB_OUTPUT"; fi
+
+  build:
+    name: ${{ matrix.service }}
+    needs: changes
+    if: needs.changes.outputs.any == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write   # lets the job request an OIDC token for AWS
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJson(needs.changes.outputs.services) }}
+    env:
+      PUSH: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Image tag = short commit SHA
+        run: echo "TAG=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Unit tests (Dockerfile "test" stage)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: services/${{ matrix.service }}
+          target: test
+          push: false
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+      - name: Build image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: services/${{ matrix.service }}
+          platforms: linux/amd64
+          load: true
+          provenance: false
+          tags: local/${{ matrix.service }}:${{ env.TAG }}
+          build-args: APP_VERSION=${{ env.TAG }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+
+      - name: Vulnerability scan (Trivy, fails on fixable CRITICAL issues)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: local/${{ matrix.service }}:${{ env.TAG }}
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: ${{ vars.TRIVY_EXIT_CODE || '1' }}
+          format: table
+
+      - name: Configure AWS credentials (OIDC)
+        if: env.PUSH == 'true'
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        if: env.PUSH == 'true'
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.1.7
+
+      - name: Push to ECR
+        if: env.PUSH == 'true'
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          SERVICE: ${{ matrix.service }}
+        run: |
+          docker tag "local/${SERVICE}:${TAG}" "${REGISTRY}/shopverse/${SERVICE}:${TAG}"
+          docker push "${REGISTRY}/shopverse/${SERVICE}:${TAG}"
+          echo "### ${SERVICE}: pushed \`${REGISTRY}/shopverse/${SERVICE}:${TAG}\`" >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    name: Update image tags (GitOps)
+    needs: [changes, build]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.changes.outputs.any == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # commit the new tags
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Write new tags into the Helm values files
+        env:
+          SERVICES: ${{ join(fromJson(needs.changes.outputs.services), ' ') }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_SHA::7}"
+          for svc in $SERVICES; do
+            sed -i -E "s#^(  tag: ).*#\1\"${TAG}\"#" "deploy/helm/values/${svc}.yaml"
+            echo "${svc} -> ${TAG}"
+          done
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add deploy/helm/values
+          if git diff --cached --quiet; then echo "Nothing to commit"; exit 0; fi
+          git commit -m "deploy: ${SERVICES} -> ${TAG} [skip ci]"
+          git pull --rebase origin main
+          git push origin HEAD:main
+          echo "Argo CD will roll out: ${SERVICES} (${TAG})" >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,15 @@
+# frontend — Node.js web UI. Internet-facing through the shared ALB.
+image:
+  repository: shopverse/frontend
+  tag: "1.0.0"
+env:
+  API_GATEWAY_URL: http://api-gateway
+resources:
+  requests: { cpu: 25m, memory: 64Mi }
+  limits: { memory: 192Mi }
+networkPolicy:
+  allowExternal: true
+ingress:
+  enabled: true
+  path: /
+  groupOrder: 100   # catch-all, evaluated last

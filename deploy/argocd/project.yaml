@@ -1,0 +1,17 @@
+# An AppProject limits what Argo CD may deploy, and where. Least privilege for GitOps.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: shopverse
+  namespace: argocd
+spec:
+  description: ShopVerse microservices and their data stores
+  sourceRepos:
+    - REPO_URL
+  destinations:
+    - { server: https://kubernetes.default.svc, namespace: shopverse }
+    - { server: https://kubernetes.default.svc, namespace: shopverse-data }
+    - { server: https://kubernetes.default.svc, namespace: monitoring }
+  clusterResourceWhitelist: []
+  namespaceResourceBlacklist:
+    - { group: "", kind: ResourceQuota }

@@ -1,0 +1,19 @@
+# Apply with:  kubectl apply -k deploy/k8s/data
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: shopverse-data
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: shopverse
+resources:
+  - postgres.yaml
+  - redis.yaml
+  - rabbitmq.yaml
+  - networkpolicies.yaml
+  - rabbitmq-servicemonitor.yaml
+configMapGenerator:
+  - name: postgres-init
+    files:
+      - init-databases.sh
+generatorOptions:
+  disableNameSuffixHash: true

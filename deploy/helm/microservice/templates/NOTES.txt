@@ -1,0 +1,6 @@
+{{ include "microservice.name" . }} {{ .Values.image.tag }} deployed to namespace {{ .Release.Namespace }}.
+
+  Watch the rollout:   kubectl -n {{ .Release.Namespace }} rollout status deploy/{{ include "microservice.name" . }}
+  See the pods:        kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/name={{ include "microservice.name" . }}
+  Tail the logs:       kubectl -n {{ .Release.Namespace }} logs -f deploy/{{ include "microservice.name" . }}
+  Smoke test:          helm test {{ .Release.Name }} -n {{ .Release.Namespace }}

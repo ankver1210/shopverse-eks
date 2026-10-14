@@ -1,0 +1,9 @@
+# Zero-trust baseline for the app namespace: block ALL incoming traffic by default.
+# Each microservice's Helm chart then opens exactly the paths it needs.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]

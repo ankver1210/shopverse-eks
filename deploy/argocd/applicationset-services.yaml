@@ -1,0 +1,58 @@
+# One Argo CD Application per microservice, all generated from this single file.
+# Each app = the shared chart (deploy/helm/microservice) + common.yaml + <service>.yaml.
+# CI/CD updates image.tag in the values file -> Argo CD notices the commit -> rolling update.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: shopverse-services
+  namespace: argocd
+spec:
+  goTemplate: true
+  # Lets you switch auto-sync off for ONE app (UI or kubectl) during the labs
+  # without the ApplicationSet controller immediately switching it back on.
+  ignoreApplicationDifferences:
+    - jsonPointers:
+        - /spec/syncPolicy
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - list:
+        elements:
+          - service: frontend
+          - service: api-gateway
+          - service: user-service
+          - service: product-service
+          - service: cart-service
+          - service: order-service
+          - service: inventory-service
+          - service: payment-service
+          - service: recommendation-service
+          - service: notification-service
+  template:
+    metadata:
+      name: "{{ .service }}"
+      labels:
+        app.kubernetes.io/part-of: shopverse
+    spec:
+      project: shopverse
+      sources:
+        - repoURL: REPO_URL
+          targetRevision: main
+          path: deploy/helm/microservice
+          helm:
+            releaseName: "{{ .service }}"
+            valueFiles:
+              - $values/deploy/helm/values/common.yaml
+              - $values/deploy/helm/values/{{ .service }}.yaml
+        - repoURL: REPO_URL
+          targetRevision: main
+          ref: values
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: shopverse
+      syncPolicy:
+        automated:
+          prune: true      # delete resources removed from Git
+          selfHeal: true   # undo manual kubectl changes (try it in Lab 12!)
+        retry:
+          limit: 5
+          backoff: { duration: 10s, factor: 2, maxDuration: 3m }
