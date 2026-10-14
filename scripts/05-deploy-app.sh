@@ -13,7 +13,9 @@ ensure_kubeconfig
 
 if [ "${1:-}" = "--uninstall" ]; then
   confirm "Uninstall all ShopVerse microservices (data stores are kept)?"
-  for svc in "${SERVICES[@]}"; do helm uninstall "$svc" -n "$APP_NAMESPACE" 2>/dev/null && ok "removed $svc" || true; done
+  for svc in "${SERVICES[@]}"; do
+    if helm uninstall "$svc" -n "$APP_NAMESPACE" 2>/dev/null; then ok "removed $svc"; fi
+  done
   exit 0
 fi
 

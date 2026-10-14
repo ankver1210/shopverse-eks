@@ -45,7 +45,7 @@ env:
 jobs:
   changes:
     name: Detect changed services
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       services: ${{ steps.detect.outputs.services }}
       any: ${{ steps.detect.outputs.any }}
@@ -81,7 +81,7 @@ jobs:
     name: ${{ matrix.service }}
     needs: changes
     if: needs.changes.outputs.any == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       id-token: write   # lets the job request an OIDC token for AWS
@@ -154,7 +154,7 @@ jobs:
     name: Update image tags (GitOps)
     needs: [changes, build]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.changes.outputs.any == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write   # commit the new tags
     steps:

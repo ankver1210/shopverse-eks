@@ -60,7 +60,9 @@ if aws eks describe-cluster --name "$CLUSTER_NAME" --region "$REGION" >/dev/null
     --filters "Name=vpc-id,Values=${VPC_ID}" "Name=tag-key,Values=elbv2.k8s.aws/cluster" \
     --query 'SecurityGroups[].GroupId' --output text 2>/dev/null || true)"
   for sg in $sgs; do
-    aws ec2 delete-security-group --region "$REGION" --group-id "$sg" 2>/dev/null && ok "deleted leftover security group ${sg}" || true
+    if aws ec2 delete-security-group --region "$REGION" --group-id "$sg" 2>/dev/null; then
+      ok "deleted leftover security group ${sg}"
+    fi
   done
 else
   warn "Cluster ${CLUSTER_NAME} not found, skipping Kubernetes cleanup."
